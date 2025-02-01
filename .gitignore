@@ -1,2 +1,4 @@
 /plugin.so
+/test.o
 /test.elf
+/test.map

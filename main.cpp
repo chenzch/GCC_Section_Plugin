@@ -8,6 +8,8 @@
 #include "plugin-version.h"
 #include "diagnostic-core.h"
 #include "c-family/c-pragma.h"
+#define GENERATOR_FILE
+#include "options.h"
 
 // 插件初始化函数
 int plugin_is_GPL_compatible;
@@ -177,34 +179,48 @@ static void handle_section_pragma(cpp_reader *ARG_UNUSED(dummy)) {
 
 #define CURR_NAME  IDENTIFIER_POINTER(DECL_NAME(decl))
 #define NO_SECTION (NULL == DECL_SECTION_NAME(decl))
-int is_verbose;
 
 static void decl_callback(void *event_data, void *data) {
     tree decl = (tree)event_data;
     if ((TREE_CODE(decl) == VAR_DECL)) {
         if (TREE_STATIC(decl)) {
+
+            const char *section_string = NULL;
+
             if (TREE_READONLY(decl)) {
                 // rodata
                 if (rodata_section_string && NO_SECTION) {
-                    set_decl_section_name(decl, rodata_section_string);
-                    fprintf(stderr, "Put %s into %s\n", CURR_NAME, rodata_section_string);
+                    section_string = rodata_section_string;
                 }
             } else if (DECL_INITIAL(decl) != NULL_TREE) {
                 // data
                 if (data_section_string && NO_SECTION) {
-                    set_decl_section_name(decl, data_section_string);
-                    fprintf(stderr, "Put %s into %s\n", CURR_NAME, data_section_string);
+                    section_string = data_section_string;
                 }
             } else {
                 // bss
                 if (bss_section_string && NO_SECTION) {
-                    set_decl_section_name(decl, bss_section_string);
-                    fprintf(stderr, "Put %s into %s\n", CURR_NAME, bss_section_string);
+                    section_string = bss_section_string;
+                }
+            }
+            if (section_string != NULL) {
+                if (flag_data_sections) {
+                    char secname[256];
+                    sprintf(&secname[0], "%s.%s", section_string, CURR_NAME);
+                    set_decl_section_name(decl, cs.add(&secname[0]));
+                    if (verbose_flag) {
+                        fprintf(stderr, "Put %s into %s\n", CURR_NAME, &secname[0]);
+                    }
+                } else {
+                    set_decl_section_name(decl, section_string);
+                    if (verbose_flag) {
+                        fprintf(stderr, "Put %s into %s\n", CURR_NAME, section_string);
+                    }
                 }
             }
         } else {
-            fprintf(stderr, "Non-static Decl node found %s, Readonly %d, Initial %d\n", CURR_NAME,
-                    TREE_READONLY(decl), DECL_INITIAL(decl) != NULL_TREE);
+            // fprintf(stderr, "Non-static Decl node found %s, Readonly %d, Initial %d\n", CURR_NAME,
+            //         TREE_READONLY(decl), DECL_INITIAL(decl) != NULL_TREE);
         }
     } else if ((TREE_CODE(decl) == CONST_DECL)) {
         fprintf(stderr, "Const Decl node found %s\n", CURR_NAME);
@@ -214,9 +230,18 @@ static void decl_callback(void *event_data, void *data) {
 static void function_callback(void *event_data, void *data) {
     tree decl = (tree)event_data;
     if (text_section_string && NO_SECTION) {
-        set_decl_section_name(decl, text_section_string);
-        if (is_verbose) {
-            fprintf(stderr, "Put %s into %s\n", CURR_NAME, text_section_string);
+        if (flag_function_sections) {
+            char secname[256];
+            sprintf(&secname[0], "%s.%s", text_section_string, CURR_NAME);
+            set_decl_section_name(decl, cs.add(&secname[0]));
+            if (verbose_flag) {
+                fprintf(stderr, "Put %s into %s\n", CURR_NAME, &secname[0]);
+            }
+        } else {
+            set_decl_section_name(decl, text_section_string);
+            if (verbose_flag) {
+                fprintf(stderr, "Put %s into %s\n", CURR_NAME, text_section_string);
+            }
         }
     }
 }
@@ -228,18 +253,12 @@ int plugin_init(struct plugin_name_args *info, struct plugin_gcc_version *ver) {
         return 1;
     }
 
-    is_verbose = 0;
-    for (int i = 0; i < info->argc; i++) {
-        if (strcmp(info->argv[i].value, "-v") == 0) {
-            is_verbose = 1;
-            break;
-        }
-    }
+    // fprintf(stderr, "Verbose %d, FuncName %d, DataName %d\n", verbose_flag, flag_function_sections,
+    //         flag_data_sections);
 
     c_register_pragma("GCC", "section", handle_section_pragma);
 
     register_callback(info->base_name, PLUGIN_INFO, NULL, &my_plugin_info);
-
     register_callback(info->base_name, PLUGIN_FINISH_PARSE_FUNCTION, function_callback, NULL);
     register_callback(info->base_name, PLUGIN_FINISH_DECL, decl_callback, NULL);
 
