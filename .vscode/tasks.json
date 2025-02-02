@@ -8,7 +8,7 @@
             "type": "shell",
             "command": "make",
             "args": [
-                "plugin.so"
+                "gccsection.so"
             ],
             "problemMatcher": "$gcc",
             "group": "build"

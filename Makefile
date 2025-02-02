@@ -8,7 +8,7 @@ CXXFLAGS+= -I$(GCCPLUGINS_DIR)/include -fPIC -fno-rtti -O2
 
 $(PLUGIN_TARGET): $(PLUGIN_SOURCE_FILES)
 	$(HOST_GCC) -shared $(CXXFLAGS) $^ -o $@
-
+#-Wl,--export-all-symbols for windows
 .PHONY: install test clean uninstall
 install: $(PLUGIN_TARGET)
 	sudo cp $(PLUGIN_TARGET) $(GCCPLUGINS_DIR)
@@ -22,4 +22,4 @@ test: install
 #	$(TARGET_PREFIX)objdump -h test.elf
 
 clean:
-	rm -rf $(PLUGIN_TARGET) test.elf
+	rm -rf $(PLUGIN_TARGET) test.o test.elf test.map

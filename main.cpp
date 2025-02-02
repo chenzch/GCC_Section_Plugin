@@ -201,10 +201,9 @@ static void set_decl_section(tree decl, const char *section_string, int append_n
 }
 
 static void decl_callback(void *event_data, void *data) {
-    tree decl = (tree)event_data;
+    tree           decl = (tree)event_data;
     enum tree_code code = TREE_CODE(decl);
-    switch (code)
-    {
+    switch (code) {
     case VAR_DECL:
         if (TREE_STATIC(decl) && NO_SECTION) {
             if (TREE_READONLY(decl)) {
