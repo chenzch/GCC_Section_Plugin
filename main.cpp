@@ -11,7 +11,9 @@
 #define GENERATOR_FILE
 #include "options.h"
 
-// 插件初始化函数
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
 int plugin_is_GPL_compatible;
 
 GTY(()) const char *text_section_string;
@@ -180,81 +182,70 @@ static void handle_section_pragma(cpp_reader *ARG_UNUSED(dummy)) {
 #define CURR_NAME  IDENTIFIER_POINTER(DECL_NAME(decl))
 #define NO_SECTION (NULL == DECL_SECTION_NAME(decl))
 
-static void decl_callback(void *event_data, void *data) {
-    tree decl = (tree)event_data;
-    if ((TREE_CODE(decl) == VAR_DECL)) {
-        if (TREE_STATIC(decl)) {
-
-            const char *section_string = NULL;
-
-            if (TREE_READONLY(decl)) {
-                // rodata
-                if (rodata_section_string && NO_SECTION) {
-                    section_string = rodata_section_string;
-                }
-            } else if (DECL_INITIAL(decl) != NULL_TREE) {
-                // data
-                if (data_section_string && NO_SECTION) {
-                    section_string = data_section_string;
-                }
-            } else {
-                // bss
-                if (bss_section_string && NO_SECTION) {
-                    section_string = bss_section_string;
-                }
-            }
-            if (section_string != NULL) {
-                if (flag_data_sections) {
-                    char secname[256];
-                    sprintf(&secname[0], "%s.%s", section_string, CURR_NAME);
-                    set_decl_section_name(decl, cs.add(&secname[0]));
-                    if (verbose_flag) {
-                        fprintf(stderr, "Put %s into %s\n", CURR_NAME, &secname[0]);
-                    }
-                } else {
-                    set_decl_section_name(decl, section_string);
-                    if (verbose_flag) {
-                        fprintf(stderr, "Put %s into %s\n", CURR_NAME, section_string);
-                    }
-                }
-            }
-        } else {
-            // fprintf(stderr, "Non-static Decl node found %s, Readonly %d, Initial %d\n", CURR_NAME,
-            //         TREE_READONLY(decl), DECL_INITIAL(decl) != NULL_TREE);
-        }
-    } else if ((TREE_CODE(decl) == CONST_DECL)) {
-        fprintf(stderr, "Const Decl node found %s\n", CURR_NAME);
-    }
-}
-
-static void function_callback(void *event_data, void *data) {
-    tree decl = (tree)event_data;
-    if (text_section_string && NO_SECTION) {
-        if (flag_function_sections) {
+static void set_decl_section(tree decl, const char *section_string, int append_name) {
+    if (section_string) {
+        if (append_name) {
             char secname[256];
-            sprintf(&secname[0], "%s.%s", text_section_string, CURR_NAME);
+            sprintf(&secname[0], "%s.%s", section_string, CURR_NAME);
             set_decl_section_name(decl, cs.add(&secname[0]));
             if (verbose_flag) {
                 fprintf(stderr, "Put %s into %s\n", CURR_NAME, &secname[0]);
             }
         } else {
-            set_decl_section_name(decl, text_section_string);
+            set_decl_section_name(decl, section_string);
             if (verbose_flag) {
-                fprintf(stderr, "Put %s into %s\n", CURR_NAME, text_section_string);
+                fprintf(stderr, "Put %s into %s\n", CURR_NAME, section_string);
             }
         }
     }
 }
 
+static void decl_callback(void *event_data, void *data) {
+    tree decl = (tree)event_data;
+    enum tree_code code = TREE_CODE(decl);
+    switch (code)
+    {
+    case VAR_DECL:
+        if (TREE_STATIC(decl) && NO_SECTION) {
+            if (TREE_READONLY(decl)) {
+                // rodata
+                set_decl_section(decl, rodata_section_string, flag_data_sections);
+            } else if (DECL_INITIAL(decl) != NULL_TREE) {
+                // data
+                set_decl_section(decl, data_section_string, flag_data_sections);
+            } else {
+                // bss
+                set_decl_section(decl, bss_section_string, flag_data_sections);
+            }
+        } else {
+            // fprintf(stderr, "Non-static Decl node found %s, Readonly %d, Initial %d\n", CURR_NAME,
+            //         TREE_READONLY(decl), DECL_INITIAL(decl) != NULL_TREE);
+        }
+        break;
+    case CONST_DECL:
+        fprintf(stderr, "Const Decl node found %s\n", CURR_NAME);
+        break;
+    default:
+        break;
+    }
+}
+
+static void function_callback(void *event_data, void *data) {
+    tree decl = (tree)event_data;
+    if (NO_SECTION) {
+        set_decl_section(decl, text_section_string, flag_function_sections);
+    }
+}
+
 static struct plugin_info my_plugin_info = {"1.0", "plugin to handle GCC section pragmas"};
 
+#ifdef _WIN32
+__declspec(dllexport)
+#endif
 int plugin_init(struct plugin_name_args *info, struct plugin_gcc_version *ver) {
     if (!plugin_default_version_check(ver, &gcc_version)) {
         return 1;
     }
-
-    // fprintf(stderr, "Verbose %d, FuncName %d, DataName %d\n", verbose_flag, flag_function_sections,
-    //         flag_data_sections);
 
     c_register_pragma("GCC", "section", handle_section_pragma);
 

@@ -11,7 +11,7 @@ plugin.so: $(PLUGIN_SOURCE_FILES)
 
 .PHONY: test clean
 test: $(PLUGIN_TARGET)
-	$(TARGET_PREFIX)gcc -c -fplugin=./$(PLUGIN_TARGET) ./test.c -o test.o -fno-builtin -Os -ffunction-sections -fdata-sections -flto
+	$(TARGET_PREFIX)gcc -c -fplugin=./$(PLUGIN_TARGET) ./test.c -o test.o -fno-builtin -Os -ffunction-sections -fdata-sections -flto -v
 	$(TARGET_PREFIX)gcc ./test.o -o test.elf -Xlinker --gc-sections -Wl,-Map,test.map
 #	$(TARGET_PREFIX)objdump -h test.elf
 
