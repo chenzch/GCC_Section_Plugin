@@ -11,9 +11,6 @@
 #define GENERATOR_FILE
 #include "options.h"
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
 int plugin_is_GPL_compatible;
 
 GTY(()) const char *text_section_string;
@@ -238,9 +235,6 @@ static void function_callback(void *event_data, void *data) {
 
 static struct plugin_info my_plugin_info = {"1.0", "plugin to handle GCC section pragmas"};
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
 int plugin_init(struct plugin_name_args *info, struct plugin_gcc_version *ver) {
     if (!plugin_default_version_check(ver, &gcc_version)) {
         return 1;

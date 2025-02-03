@@ -7,9 +7,6 @@
             "label": "build",
             "type": "shell",
             "command": "make",
-            "args": [
-                "gccsection.so"
-            ],
             "problemMatcher": "$gcc",
             "group": "build"
         },
