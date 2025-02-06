@@ -2,6 +2,7 @@
 
 # Initialize an array to store processed arguments
 processed_args=()
+add_plugin=false
 
 # Iterate over each input argument
 for arg in "$@"; do
@@ -16,13 +17,23 @@ for arg in "$@"; do
     if [[ "$arg" == @*.args ]]; then
         # Remove the leading @ symbol
         filename="${arg:1}"
+
         # Use sed to replace content in the file
         sed -i -E 's/([a-zA-Z]):\//\/mnt\/\L\1\//g' "$filename"
+
+        if grep -q "\-c" "$filename"; then
+            add_plugin=true
+        fi
     fi
 
     # Add the processed argument to the array
     processed_args+=("$arg")
 done
+
+# If -c was found, add the plugin argument
+if $add_plugin; then
+    processed_args+=("-fplugin=../gccsection13.so")
+fi
 
 # Call wsl and pass the processed arguments
 wsl "${processed_args[@]}"
