@@ -32,7 +32,7 @@ done
 
 # If -c was found, add the plugin argument
 if $add_plugin; then
-    processed_args+=("-fplugin=../gccsection13.so")
+    processed_args+=("-fplugin=gccsection13")
 fi
 
 # Call wsl and pass the processed arguments
