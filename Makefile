@@ -3,7 +3,8 @@ TARGET_PREFIX=arm-none-eabi-
 TARGET_GCC=$(TARGET_PREFIX)gcc
 PLUGIN_SOURCE_FILES= main.cpp
 PLUGIN_NAME=gccsection
-PLUGIN_TARGET=$(PLUGIN_NAME).so
+GCC_VERSION:=$(shell $(TARGET_GCC) -dumpversion | cut -d. -f1)
+PLUGIN_TARGET=$(PLUGIN_NAME)$(GCC_VERSION).so
 GCCPLUGINS_DIR:= $(shell $(TARGET_GCC) -print-file-name=plugin)
 CXXFLAGS+= -I$(GCCPLUGINS_DIR)/include -fPIC -fno-rtti -O2
 
@@ -17,8 +18,8 @@ install: $(PLUGIN_TARGET)
 uninstall:
 	sudo rm -f $(GCCPLUGINS_DIR)/$(PLUGIN_TARGET)
 
-test: install
-	$(TARGET_GCC) -c -fplugin=$(PLUGIN_NAME) ./test.c -o test.o -fno-builtin -Os -ffunction-sections -fdata-sections -flto -v
+test: $(PLUGIN_TARGET)
+	$(TARGET_GCC) -c -fplugin=./$(PLUGIN_TARGET) ./test.c -o test.o -fno-builtin -Os -ffunction-sections -fdata-sections -flto -v
 	$(TARGET_GCC) ./test.o -o test.elf -Xlinker --gc-sections -Wl,-Map,test.map
 #	$(TARGET_PREFIX)objdump -h test.elf
 

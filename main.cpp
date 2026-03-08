@@ -100,16 +100,35 @@ class GTY(()) context_section {
         cnt   = 0;
     }
 
+    ~context_section() {
+        free(names);
+    }
+
     inline void check_space(void) {
         if (cnt == size) {
-            // Need more space
-            names = (const char **)xrealloc(names, size * sizeof(const char *));
+            names = (const char **)xrealloc(names, size * 2 * sizeof(const char *));
             size *= 2;
         }
     }
 };
 
 context_section GTY(()) cs;
+
+static void set_section_string(const char *kind, const char *section, location_t loc) {
+    if (strcmp(kind, "text") == 0) {
+        text_section_string = (section && strcmp(section, "default") != 0) ? section : NULL;
+    } else if (strcmp(kind, "data") == 0) {
+        data_section_string = (section && strcmp(section, "default") != 0) ? section : NULL;
+    } else if (strcmp(kind, "bss") == 0) {
+        bss_section_string = (section && strcmp(section, "default") != 0) ? section : NULL;
+    } else if (strcmp(kind, "rodata") == 0) {
+        rodata_section_string = (section && strcmp(section, "default") != 0) ? section : NULL;
+    } else {
+        warning_at(loc, 0,
+                   "Unsupported section name [text|data|bss|rodata]"
+                   " after %<#pragma GCC section%>");
+    }
+}
 
 static void handle_section_pragma(cpp_reader *ARG_UNUSED(dummy)) {
     tree           x;
@@ -126,54 +145,12 @@ static void handle_section_pragma(cpp_reader *ARG_UNUSED(dummy)) {
 
     token = pragma_lex(&x, &loc);
     if (token != CPP_STRING) {
-        if (strcmp(kind_string, "text") == 0) {
-            text_section_string = NULL;
-        } else if (strcmp(kind_string, "data") == 0) {
-            data_section_string = NULL;
-        } else if (strcmp(kind_string, "bss") == 0) {
-            bss_section_string = NULL;
-        } else if (strcmp(kind_string, "rodata") == 0) {
-            rodata_section_string = NULL;
-        } else {
-            warning_at(loc, 0,
-                       "Unsupported section name [text|data|bss|rodata]"
-                       " after %<#pragma GCC section%>");
-        }
+        set_section_string(kind_string, NULL, loc);
         return;
     }
 
     const char *section_string = cs.add(TREE_STRING_POINTER(x));
-
-    if (strcmp(kind_string, "text") == 0) {
-        if (strcmp(section_string, "default") == 0) {
-            text_section_string = NULL;
-        } else {
-            text_section_string = section_string;
-        }
-    } else if (strcmp(kind_string, "data") == 0) {
-        if (strcmp(section_string, "default") == 0) {
-            data_section_string = NULL;
-        } else {
-            data_section_string = section_string;
-        }
-    } else if (strcmp(kind_string, "bss") == 0) {
-        if (strcmp(section_string, "default") == 0) {
-            bss_section_string = NULL;
-        } else {
-            bss_section_string = section_string;
-        }
-    } else if (strcmp(kind_string, "rodata") == 0) {
-        if (strcmp(section_string, "default") == 0) {
-            rodata_section_string = NULL;
-        } else {
-            rodata_section_string = section_string;
-        }
-    } else {
-        warning_at(loc, 0,
-                   "Unsupported section name [text|data|bss|rodata]"
-                   " after %<#pragma GCC section%>");
-        return;
-    }
+    set_section_string(kind_string, section_string, loc);
 }
 
 #define CURR_NAME  IDENTIFIER_POINTER(DECL_NAME(decl))
@@ -183,7 +160,7 @@ static void set_decl_section(tree decl, const char *section_string, int append_n
     if (section_string) {
         if (append_name) {
             char secname[256];
-            sprintf(&secname[0], "%s.%s", section_string, CURR_NAME);
+            snprintf(&secname[0], sizeof(secname), "%s.%s", section_string, CURR_NAME);
             set_decl_section_name(decl, cs.add(&secname[0]));
             if (verbose_flag) {
                 fprintf(stderr, "Put %s into %s\n", CURR_NAME, &secname[0]);
@@ -200,26 +177,18 @@ static void set_decl_section(tree decl, const char *section_string, int append_n
 static void decl_callback(void *event_data, void *data) {
     tree           decl = (tree)event_data;
     enum tree_code code = TREE_CODE(decl);
+    (void)data;
     switch (code) {
     case VAR_DECL:
         if (TREE_STATIC(decl) && NO_SECTION) {
             if (TREE_READONLY(decl)) {
-                // rodata
                 set_decl_section(decl, rodata_section_string, flag_data_sections);
             } else if (DECL_INITIAL(decl) != NULL_TREE) {
-                // data
                 set_decl_section(decl, data_section_string, flag_data_sections);
             } else {
-                // bss
                 set_decl_section(decl, bss_section_string, flag_data_sections);
             }
-        } else {
-            // fprintf(stderr, "Non-static Decl node found %s, Readonly %d, Initial %d\n", CURR_NAME,
-            //         TREE_READONLY(decl), DECL_INITIAL(decl) != NULL_TREE);
         }
-        break;
-    case CONST_DECL:
-        fprintf(stderr, "Const Decl node found %s\n", CURR_NAME);
         break;
     default:
         break;
@@ -227,10 +196,17 @@ static void decl_callback(void *event_data, void *data) {
 }
 
 static void function_callback(void *event_data, void *data) {
+    (void)data;
     tree decl = (tree)event_data;
     if (NO_SECTION) {
         set_decl_section(decl, text_section_string, flag_function_sections);
     }
+}
+
+static void register_my_pragma(void *event_data, void *data) {
+    (void)event_data;
+    (void)data;
+    c_register_pragma("GCC", "section", handle_section_pragma);
 }
 
 static struct plugin_info my_plugin_info = {"1.0", "plugin to handle GCC section pragmas"};
@@ -240,8 +216,7 @@ int plugin_init(struct plugin_name_args *info, struct plugin_gcc_version *ver) {
         return 1;
     }
 
-    c_register_pragma("GCC", "section", handle_section_pragma);
-
+    register_callback(info->base_name, PLUGIN_PRAGMAS, register_my_pragma, NULL);
     register_callback(info->base_name, PLUGIN_INFO, NULL, &my_plugin_info);
     register_callback(info->base_name, PLUGIN_FINISH_PARSE_FUNCTION, function_callback, NULL);
     register_callback(info->base_name, PLUGIN_FINISH_DECL, decl_callback, NULL);
